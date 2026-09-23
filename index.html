@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BlaccShirtz | Wear your legend</title>
+    <meta name="description" content="Statement shirts for people who make their own rules." />
+    <link rel="preconnect" href="https://blaccshirtz.com" />
+    <link rel="preconnect" href="https://blaccshirtz.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="container nav">
+        <a class="brand" href="#top" aria-label="BlaccShirtz home"><span class="brand-mark">B</span><span>Blacc<span>Shirtz</span></span></a>
+        <nav class="nav-links" aria-label="Main navigation"><a href="#featured">Shop</a><a href="#collections">Collections</a><a href="#story">Our story</a></nav>
+        <div class="nav-actions"><button class="ghost-btn" id="search-button" type="button">Search</button><button class="cart-btn" type="button" aria-label="Open shopping cart">Bag <span id="cart-count">0</span></button></div>
+      </div>
+      <form class="search-bar container" id="search-bar" role="search"><label class="sr-only" for="search-input">Search shirts</label><input id="search-input" type="search" placeholder="Search the collection..." autocomplete="off" /><button type="submit">Find a shirt</button></form>
+    </header>
+    <main id="top">
+      <section class="hero"><div class="container hero-grid"><div class="hero-copy"><p class="eyebrow">The new standard in statement wear</p><h1>Wear your <span>legend.</span></h1><p class="subtext">Bold graphics. Comfortable fits. Shirts made for the main character in you.</p><div class="hero-actions"><a href="#featured" class="primary-btn">Shop the drop <span>↗</span></a><a href="#collections" class="secondary-btn">Explore styles</a></div><div class="hero-note"><span class="note-dot"></span> New drop live now <strong>—</strong> limited pieces</div></div><div class="hero-visual"><div class="hero-frame"><img src="https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1100&q=85" alt="Model wearing a black statement shirt" /><span class="hero-stamp">BS<br /><small>EST. 2024</small></span></div><div class="floating-card"><span>Featured piece</span><strong>Greek Gods / Zeus</strong><em>GH₵150</em></div></div></div></section>
+      <section class="ticker" aria-label="Brand values"><div class="ticker-track"><span>BUILT DIFFERENT</span><b>✦</b><span>MADE IN GHANA</span><b>✦</b><span>WEAR YOUR LEGEND</span><b>✦</b><span>BUILT DIFFERENT</span><b>✦</b></div></section>
+      <section id="featured" class="products section-space"><div class="container section-header"><div><p class="eyebrow">Fresh from the studio</p><h2>The latest drop</h2></div><span class="section-count">04 pieces / 01 attitude</span></div><div class="container product-grid" id="product-grid"></div><p class="container no-results" id="no-results">No shirts match that search.</p></section>
+      <section id="collections" class="collections section-space"><div class="container section-header"><div><p class="eyebrow">Find your energy</p><h2>Choose your mythology.</h2></div></div><div class="container collection-grid"><article class="collection-card accent-1"><span>01 / Power</span><h3>Greek Gods</h3><p>For the ones who walk in like they own the room.</p><a href="#featured">Shop collection ↗</a></article><article class="collection-card accent-2"><span>02 / Motion</span><h3>Street Form</h3><p>Everyday silhouettes with a little more edge.</p><a href="#featured">Shop collection ↗</a></article><article class="collection-card accent-3"><span>03 / Essentials</span><h3>After Dark</h3><p>Clean, considered staples for your off-duty uniform.</p><a href="#featured">Shop collection ↗</a></article></div></section>
+      <section id="story" class="story section-space"><div class="container story-inner"><p class="eyebrow">Why BlaccShirtz</p><h2>Not just a shirt.<br /><em>A point of view.</em></h2><p>We make expressive pieces for people who refuse to blend in. Small-batch designs, premium-feel fabrics, and a fit that lets the graphic do the talking.</p><a href="#featured" class="text-link">Meet the collection <span>↗</span></a></div></section>
+    </main>
+    <div class="cart-backdrop" id="cart-backdrop"></div><aside class="cart-panel" id="cart-panel" aria-label="Shopping cart" aria-hidden="true"><div class="cart-header"><div><p class="eyebrow">Your selection</p><h3>Your bag</h3></div><button id="close-cart" type="button" aria-label="Close cart">×</button></div><div id="cart-items" class="cart-items"><p class="empty-cart">Your bag is waiting.</p></div><div class="cart-footer"><div class="subtotal-row"><span>Subtotal</span><strong id="subtotal">GH₵0.00</strong></div><label class="payment-method" for="payment-method"><span>Payment method</span><select id="payment-method"><option value="mtn-momo">MTN MoMo: +233537599376</option></select></label><p class="payment-note">Tap below to open MTN MoMo transfer on your phone. Send the subtotal to +233537599376.</p><button class="checkout-btn" type="button">Open MTN MoMo <span>↗</span></button></div></aside><div class="toast" id="toast" role="status"></div>
+    <script src="script.js"></script>
+  </body>
+</html>
