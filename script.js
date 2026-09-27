@@ -1,3 +1,40 @@
+document.querySelector(".section-count").textContent = "09 pieces / 01 attitude";
+
+const sectionTabs = document.querySelector('[role="tablist"]');
+const tabPanels = [...document.querySelectorAll('[role="tabpanel"]')];
+function activatePanel(panelId) {
+  const activePanel = tabPanels.find((panel) => panel.id === panelId);
+  if (!activePanel) return;
+  tabPanels.forEach((panel) => { panel.hidden = panel !== activePanel; });
+  sectionTabs.querySelectorAll('[role="tab"]').forEach((tab) => {
+    const isActive = tab.dataset.panel === panelId;
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+    tab.classList.toggle("active", isActive);
+  });
+}
+sectionTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest('[role="tab"]');
+  if (tab) activatePanel(tab.dataset.panel);
+});
+sectionTabs.addEventListener("keydown", (event) => {
+  if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  const tabs = [...sectionTabs.querySelectorAll('[role="tab"]')];
+  const currentIndex = tabs.indexOf(document.activeElement);
+  const offset = event.key === 'ArrowRight' ? 1 : -1;
+  const nextTab = tabs[(currentIndex + offset + tabs.length) % tabs.length];
+  nextTab.focus();
+  activatePanel(nextTab.dataset.panel);
+  event.preventDefault();
+});
+document.addEventListener("click", (event) => {
+  const panelLink = event.target.closest('a[href="#featured"], a[href="#collections"], a[href="#story"]');
+  if (!panelLink) return;
+  event.preventDefault();
+  activatePanel(panelLink.hash.slice(1));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
 const products = [
   { id: 1, name: "Greek Gods (Zeus)", price: 150, image: "images/products/fotv2248.jpg", description: "A heavyweight statement piece for your everyday mythology." },
   { id: 2, name: "Greek Gods(Hades)", price: 150, image: "images/products/owcc2897.jpg", description: "Lightweight comfort with a clean, easy silhouette." },
