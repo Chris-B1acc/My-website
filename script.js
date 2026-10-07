@@ -1,70 +1,523 @@
-document.querySelector(".section-count").textContent = "09 pieces / 01 attitude";
+const rawProducts = window.BLACCSHIRTZ_PRODUCTS;
+const currency = window.BLACCSHIRTZ_CURRENCY || "GHS";
+const storageKey = "blaccshirtz-bag-v1";
 
-const sectionTabs = document.querySelector('[role="tablist"]');
-const tabPanels = [...document.querySelectorAll('[role="tabpanel"]')];
-function activatePanel(panelId) {
-  const activePanel = tabPanels.find((panel) => panel.id === panelId);
-  if (!activePanel) return;
-  tabPanels.forEach((panel) => { panel.hidden = panel !== activePanel; });
-  sectionTabs.querySelectorAll('[role="tab"]').forEach((tab) => {
-    const isActive = tab.dataset.panel === panelId;
-    tab.setAttribute("aria-selected", String(isActive));
-    tab.tabIndex = isActive ? 0 : -1;
-    tab.classList.toggle("active", isActive);
+function validateProducts(value) {
+  if (!Array.isArray(value)) {
+    console.error("BLACCSHIRTZ_PRODUCTS must be an array in product-data.js.");
+    return [];
+  }
+
+  const seenIds = new Set();
+  return value.filter((product, index) => {
+    const valid = product
+      && typeof product.id === "string"
+      && product.id.trim() !== ""
+      && typeof product.name === "string"
+      && product.name.trim() !== ""
+      && typeof product.description === "string"
+      && typeof product.category === "string"
+      && product.category.trim() !== ""
+      && typeof product.image === "string"
+      && product.image.trim() !== ""
+      && Number.isFinite(product.price)
+      && product.price >= 0
+      && !seenIds.has(product.id);
+
+    if (!valid) {
+      console.error(`Skipping invalid product at index ${index} in product-data.js.`);
+      return false;
+    }
+    seenIds.add(product.id);
+    return true;
   });
 }
-sectionTabs.addEventListener("click", (event) => {
-  const tab = event.target.closest('[role="tab"]');
-  if (tab) activatePanel(tab.dataset.panel);
+
+const products = validateProducts(rawProducts);
+const money = new Intl.NumberFormat("en-GH", {
+  style: "currency",
+  currency,
+  minimumFractionDigits: 2
 });
-sectionTabs.addEventListener("keydown", (event) => {
-  if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-  const tabs = [...sectionTabs.querySelectorAll('[role="tab"]')];
-  const currentIndex = tabs.indexOf(document.activeElement);
-  const offset = event.key === 'ArrowRight' ? 1 : -1;
-  const nextTab = tabs[(currentIndex + offset + tabs.length) % tabs.length];
-  nextTab.focus();
-  activatePanel(nextTab.dataset.panel);
-  event.preventDefault();
+const featuredGrid = document.getElementById("featured-grid");
+const catalogGrid = document.getElementById("catalog-grid");
+const searchInput = document.getElementById("product-search");
+const categoryFilter = document.getElementById("category-filter");
+const catalogCount = document.getElementById("catalog-count");
+const bagCount = document.getElementById("bag-count");
+const drawer = document.getElementById("cart-drawer");
+const drawerBackdrop = document.getElementById("drawer-backdrop");
+const drawerBody = document.getElementById("drawer-body");
+const productDialog = document.getElementById("product-dialog");
+const productDialogContent = document.getElementById("product-dialog-content");
+const toast = document.getElementById("toast");
+const menuToggle = document.getElementById("menu-toggle");
+const siteNav = document.getElementById("site-nav");
+
+let cart = loadCart();
+let drawerReturnFocus = null;
+let drawerIsOpen = false;
+let drawerFrame = 0;
+let drawerCloseTimer = 0;
+let toastTimer = 0;
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
+function formatPrice(price) {
+  return money.format(price);
+}
+
+function loadCart() {
+  let saved;
+  try {
+    saved = window.localStorage.getItem(storageKey);
+  } catch (error) {
+    console.warn("The saved bag is unavailable in this browser.", error);
+    return [];
+  }
+  if (!saved) return [];
+
+  try {
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) throw new TypeError("Saved bag is not a list.");
+    return parsed.reduce((items, entry) => {
+      if (!entry || typeof entry.id !== "string" || !Number.isInteger(entry.quantity)) return items;
+      const product = products.find((item) => item.id === entry.id);
+      if (product && entry.quantity > 0 && entry.quantity <= 99) {
+        items.push({ id: product.id, quantity: entry.quantity });
+      }
+      return items;
+    }, []);
+  } catch (error) {
+    console.warn("The saved bag could not be read and has been ignored.", error);
+    return [];
+  }
+}
+
+function saveCart() {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(cart));
+  } catch (error) {
+    console.warn("The bag could not be saved in this browser.", error);
+    showToast("Your bag works for this visit but could not be saved.");
+  }
+}
+
+function announce(message) {
+  toast.textContent = message;
+  toast.classList.add("is-visible");
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 2600);
+}
+
+function emptyCatalogMarkup() {
+  return `
+    <div class="empty-state">
+      <span class="empty-state-mark" aria-hidden="true">B</span>
+      <h3>The collection is taking shape.</h3>
+      <p>There are no products to show yet. Add verified product details to <strong>product-data.js</strong>—including a name, price, category, and path to a real product image. Add a description only when you have accurate copy.</p>
+    </div>`;
+}
+
+function noMatchesMarkup() {
+  return `
+    <div class="empty-state filtered-empty">
+      <span class="empty-state-mark" aria-hidden="true">⌕</span>
+      <h3>No matching pieces.</h3>
+      <p>Try another search or choose a different category.</p>
+    </div>`;
+}
+
+function productCardMarkup(product) {
+  const id = escapeHTML(product.id);
+  const name = escapeHTML(product.name);
+  const description = escapeHTML(product.description);
+  const category = escapeHTML(product.category);
+  const image = escapeHTML(product.image);
+  return `
+    <article class="product-card">
+      <button class="product-card-image" type="button" data-product-id="${id}" aria-label="View ${name} details">
+        <img src="${image}" alt="${name}" loading="lazy">
+      </button>
+      <div class="product-card-meta">
+        <h3>${name}</h3>
+        <span class="product-card-price">${formatPrice(product.price)}</span>
+      </div>
+      <p class="product-card-category">${category}</p>
+      <div class="product-card-actions">
+        <button class="product-open" type="button" data-product-id="${id}">View details</button>
+        <button class="add-button" type="button" data-add-id="${id}">Add to bag <span aria-hidden="true">+</span></button>
+      </div>
+      <span class="sr-only">${description}</span>
+    </article>`;
+}
+
+function getVisibleProducts() {
+  const query = searchInput.value.trim().toLocaleLowerCase();
+  const category = categoryFilter.value;
+  return products.filter((product) => {
+    const matchesCategory = !category || product.category === category;
+    const searchable = `${product.name} ${product.description} ${product.category}`.toLocaleLowerCase();
+    return matchesCategory && (!query || searchable.includes(query));
+  });
+}
+
+function renderProducts() {
+  const selectedFeatured = products.filter((product) => product.featured === true || product.newArrival === true);
+  const featured = (selectedFeatured.length ? selectedFeatured : products).slice(0, 4);
+  featuredGrid.innerHTML = featured.length
+    ? featured.map(productCardMarkup).join("")
+    : emptyCatalogMarkup();
+
+  const visibleProducts = getVisibleProducts();
+  catalogCount.textContent = `${visibleProducts.length} ${visibleProducts.length === 1 ? "piece" : "pieces"}`;
+  catalogGrid.innerHTML = visibleProducts.length
+    ? visibleProducts.map(productCardMarkup).join("")
+    : products.length ? noMatchesMarkup() : emptyCatalogMarkup();
+}
+
+function populateCategories() {
+  const categories = [...new Set(products.map((product) => product.category))].sort((a, b) => a.localeCompare(b));
+  categoryFilter.innerHTML = '<option value="">All categories</option>' + categories
+    .map((category) => `<option value="${escapeHTML(category)}">${escapeHTML(category)}</option>`)
+    .join("");
+}
+
+function cartEntries() {
+  return cart.map((entry) => ({
+    ...entry,
+    product: products.find((product) => product.id === entry.id)
+  })).filter((entry) => entry.product);
+}
+
+function cartItemCount() {
+  return cart.reduce((sum, entry) => sum + entry.quantity, 0);
+}
+
+function cartTotal() {
+  return cartEntries().reduce((sum, entry) => sum + entry.product.price * entry.quantity, 0);
+}
+
+function updateBagCount() {
+  const count = cartItemCount();
+  bagCount.textContent = String(count);
+  bagCount.setAttribute("aria-label", `${count} ${count === 1 ? "item" : "items"}`);
+}
+
+function cartLineMarkup(entry) {
+  const product = entry.product;
+  const id = escapeHTML(product.id);
+  return `
+    <article class="cart-line">
+      <img src="${escapeHTML(product.image)}" alt="${escapeHTML(product.name)}">
+      <div class="cart-line-info">
+        <h3>${escapeHTML(product.name)}</h3>
+        <p>${formatPrice(product.price)}</p>
+        <div class="quantity-control" aria-label="Quantity">
+          <button type="button" data-quantity-id="${id}" data-change="-1" aria-label="Remove one ${escapeHTML(product.name)}">−</button>
+          <span>${entry.quantity}</span>
+          <button type="button" data-quantity-id="${id}" data-change="1" aria-label="Add one ${escapeHTML(product.name)}">+</button>
+        </div>
+      </div>
+      <button class="remove-item" type="button" data-remove-id="${id}" aria-label="Remove ${escapeHTML(product.name)} from bag">Remove</button>
+    </article>`;
+}
+
+function renderCart() {
+  updateBagCount();
+  const entries = cartEntries();
+  if (!entries.length) {
+    drawerBody.innerHTML = `
+      <div class="cart-empty">
+        <span class="cart-empty-mark" aria-hidden="true">B</span>
+        <h3>Your bag is taking a breather.</h3>
+        <p>When you find a piece that feels like you, it will be waiting here.</p>
+        <a class="button button-primary" href="#shop">Explore the collection <span aria-hidden="true">↗</span></a>
+      </div>`;
+    return;
+  }
+
+  drawerBody.innerHTML = `
+    <div class="cart-lines">${entries.map(cartLineMarkup).join("")}</div>
+    <div class="cart-summary">
+      <p class="cart-subtotal"><span>Subtotal</span><span>${formatPrice(cartTotal())}</span></p>
+      <p class="cart-total"><span>Total</span><strong>${formatPrice(cartTotal())}</strong></p>
+      <p class="cart-disclaimer">This static storefront does not process payments or submit orders. Checkout below prepares a local confirmation only.</p>
+      <button class="button button-primary drawer-action" id="start-checkout" type="button">Continue to checkout <span aria-hidden="true">↗</span></button>
+    </div>`;
+}
+
+function openDrawer(opener) {
+  window.clearTimeout(drawerCloseTimer);
+  drawerIsOpen = true;
+  drawerReturnFocus = opener instanceof HTMLElement ? opener : document.activeElement;
+  renderCart();
+  drawer.hidden = false;
+  drawer.inert = false;
+  drawer.setAttribute("aria-hidden", "false");
+  drawerBackdrop.hidden = false;
+  document.body.classList.add("drawer-open");
+  window.cancelAnimationFrame(drawerFrame);
+  drawerFrame = requestAnimationFrame(() => {
+    if (!drawerIsOpen) return;
+    drawer.classList.add("is-open");
+    drawerBackdrop.classList.add("is-open");
+    document.getElementById("close-drawer").focus();
+  });
+}
+
+function closeDrawer() {
+  if (!drawerIsOpen) return;
+  drawerIsOpen = false;
+  window.cancelAnimationFrame(drawerFrame);
+  drawer.classList.remove("is-open");
+  drawerBackdrop.classList.remove("is-open");
+  drawer.setAttribute("aria-hidden", "true");
+  drawer.inert = true;
+  document.body.classList.remove("drawer-open");
+  drawerCloseTimer = window.setTimeout(() => {
+    if (drawerIsOpen) return;
+    drawer.hidden = true;
+    drawerBackdrop.hidden = true;
+  }, 300);
+  if (drawerReturnFocus instanceof HTMLElement) drawerReturnFocus.focus();
+}
+
+function addToCart(id) {
+  const product = products.find((item) => item.id === id);
+  if (!product) {
+    console.error(`Cannot add unknown product "${id}" to the bag.`);
+    return;
+  }
+  const existing = cart.find((entry) => entry.id === id);
+  if (existing) {
+    if (existing.quantity >= 99) {
+      announce("The maximum quantity for this item is 99.");
+      return;
+    }
+    existing.quantity += 1;
+  } else {
+    cart.push({ id, quantity: 1 });
+  }
+  saveCart();
+  renderCart();
+  announce("Added to your bag.");
+  if (!drawer.classList.contains("is-open")) openDrawer(document.activeElement);
+}
+
+function changeQuantity(id, amount) {
+  const entry = cart.find((item) => item.id === id);
+  if (!entry) return;
+  if (amount > 0 && entry.quantity >= 99) {
+    announce("The maximum quantity for this item is 99.");
+    return;
+  }
+  entry.quantity += amount;
+  if (entry.quantity <= 0) cart = cart.filter((item) => item.id !== id);
+  saveCart();
+  renderCart();
+}
+
+function openProduct(id) {
+  const product = products.find((item) => item.id === id);
+  if (!product) {
+    console.error(`Cannot show unknown product "${id}".`);
+    return;
+  }
+  productDialogContent.innerHTML = `
+    <div class="product-detail">
+      <img class="product-detail-image" src="${escapeHTML(product.image)}" alt="${escapeHTML(product.name)}">
+      <div class="product-detail-copy">
+        <p class="eyebrow"><span class="eyebrow-line"></span> ${escapeHTML(product.category)}</p>
+        <h2 id="product-dialog-title">${escapeHTML(product.name)}</h2>
+        <p class="product-detail-price">${formatPrice(product.price)}</p>
+        ${product.description ? `<p class="product-detail-description">${escapeHTML(product.description)}</p>` : ""}
+        <button class="button button-primary" type="button" data-dialog-add-id="${escapeHTML(product.id)}">Add to bag <span aria-hidden="true">+</span></button>
+      </div>
+    </div>`;
+  productDialog.showModal();
+}
+
+function renderCheckout() {
+  const entries = cartEntries();
+  drawerBody.innerHTML = `
+    <form class="checkout-form" id="checkout-form">
+      <h3>Your details</h3>
+      <p>Complete this form to preview your order confirmation. This static site does not send your details or process payment.</p>
+      <div class="checkout-recap" aria-label="Order items">
+        ${entries.map(({ product, quantity }) => `
+          <p class="checkout-recap-row">
+            <span>${escapeHTML(product.name)} <small>× ${quantity}</small></span>
+            <strong>${formatPrice(product.price * quantity)}</strong>
+          </p>`).join("")}
+      </div>
+      <label for="checkout-name">Full name</label>
+      <input id="checkout-name" name="name" autocomplete="name" required maxlength="100">
+      <label for="checkout-email">Email address</label>
+      <input id="checkout-email" name="email" type="email" autocomplete="email" required maxlength="254">
+      <label for="checkout-address">Delivery address</label>
+      <input id="checkout-address" name="address" autocomplete="street-address" required maxlength="200">
+      <p class="cart-total"><span>Order total</span><strong>${formatPrice(cartTotal())}</strong></p>
+      <div class="checkout-buttons">
+        <button class="button button-quiet" id="back-to-bag" type="button">Back to bag</button>
+        <button class="button button-primary" type="submit">Preview order <span aria-hidden="true">↗</span></button>
+      </div>
+      <p class="checkout-error" id="checkout-error" role="status"></p>
+    </form>`;
+}
+
+function renderConfirmation(name, orderTotal, orderItems) {
+  const reference = `BS-${Date.now().toString(36).toUpperCase()}`;
+  drawerBody.innerHTML = `
+    <div class="order-confirmation">
+      <span class="confirmation-mark" aria-hidden="true">✓</span>
+      <h3>Order preview ready, ${escapeHTML(name)}.</h3>
+      <p class="order-reference">LOCAL REFERENCE / ${reference}</p>
+      <div class="checkout-recap" aria-label="Order items">
+        ${orderItems.map(({ product, quantity }) => `
+          <p class="checkout-recap-row">
+            <span>${escapeHTML(product.name)} <small>× ${quantity}</small></span>
+            <strong>${formatPrice(product.price * quantity)}</strong>
+          </p>`).join("")}
+        <p class="checkout-recap-row recap-total"><span>Total</span><strong>${formatPrice(orderTotal)}</strong></p>
+      </div>
+      <p>Your ${formatPrice(orderTotal)} order preview is shown for this browser only. <strong>No order has been sent and no payment was processed.</strong> Connect a secure checkout service before accepting real orders.</p>
+      <button class="button button-primary drawer-action" id="finish-confirmation" type="button">Continue browsing <span aria-hidden="true">↗</span></button>
+    </div>`;
+}
+
+function closeMobileMenu() {
+  menuToggle.setAttribute("aria-expanded", "false");
+  menuToggle.setAttribute("aria-label", "Open navigation");
+  siteNav.classList.remove("is-open");
+}
+
+document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
+populateCategories();
+renderProducts();
+renderCart();
+
+searchInput.addEventListener("input", renderProducts);
+categoryFilter.addEventListener("change", renderProducts);
+
+menuToggle.addEventListener("click", () => {
+  const isExpanded = menuToggle.getAttribute("aria-expanded") === "true";
+  menuToggle.setAttribute("aria-expanded", String(!isExpanded));
+  menuToggle.setAttribute("aria-label", isExpanded ? "Open navigation" : "Close navigation");
+  siteNav.classList.toggle("is-open", !isExpanded);
+  if (!isExpanded) siteNav.querySelector("a").focus();
 });
-document.addEventListener("click", (event) => {
-  const panelLink = event.target.closest('a[href="#featured"], a[href="#collections"], a[href="#story"]');
-  if (!panelLink) return;
-  event.preventDefault();
-  activatePanel(panelLink.hash.slice(1));
-  window.scrollTo({ top: 0, behavior: "smooth" });
+siteNav.addEventListener("click", (event) => {
+  if (event.target.closest("a")) closeMobileMenu();
 });
 
-const products = [
-  { id: 1, name: "Greek Gods (Zeus)", price: 150, image: "images/products/fotv2248.jpg", description: "A heavyweight statement piece for your everyday mythology." },
-  { id: 2, name: "Greek Gods(Hades)", price: 150, image: "images/products/owcc2897.jpg", description: "Lightweight comfort with a clean, easy silhouette." },
-  { id: 3, name: "Greek Gods(Hera)", price: 150, image: "images/products/xxnw9578.jpg", description: "A sharper stripe for the weekend rotation." },
-  { id: 4, name: "Greek Gods(Athena)", price: 150, image: "images/products/fhxq8691.jpg", description: "Soft texture, strong silhouette, zero apologies." },
-  { id: 5, name: "Greek Gods(Aphrodite)", price: 150, image: "images/products/nifb5679.jpg" },
-  { id: 6, name: "Greek Gods(Ares)", price: 150, image: "images/products/cfua4570.jpg" },
-  { id: 7, name: "Greek Gods(Poseidon)", price: 150, image: "images/products/jhjr1973.jpg", description: "A bold ocean-inspired statement for everyday wear." },
-  { id: 8, name: "Greek Gods(Artemis)", price: 150, image: "images/products/cesp8836.jpg", description: "A sharp, independent silhouette with mythic energy." },
-  { id: 9, name: "Greek Gods(Apollo)", price: 150, image: "images/products/rchj4099.jpg", description: "A clean graphic piece made to stand in the spotlight." }
-  
-];
-const cart = [];
-const productGrid = document.getElementById("product-grid");
-const cartItems = document.getElementById("cart-items");
-const cartCount = document.getElementById("cart-count");
-const subtotalEl = document.getElementById("subtotal");
-const cartPanel = document.getElementById("cart-panel");
-const cartBackdrop = document.getElementById("cart-backdrop");
-const toast = document.getElementById("toast");
-function formatPrice(value) { return new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", currencyDisplay: "code" }).format(value).replace("GHS", "GH₵"); }
-function getCartItem(productId) { return cart.find((item) => item.id === productId); }
-function showToast(message) { toast.textContent = message; toast.classList.add("show"); window.clearTimeout(showToast.timeout); showToast.timeout = window.setTimeout(() => toast.classList.remove("show"), 2200); }
-function renderProducts(list = products) { productGrid.innerHTML = list.map((product) => `<article class="product-card"><div class="product-image"><span class="product-badge">${product.badge || "New"}</span><img src="${product.image}" alt="${product.name}" loading="lazy" /></div><div class="product-info"><div class="product-meta"><h3>${product.name}</h3><span class="price">${formatPrice(product.price)}</span></div><p>${product.description || "A statement piece for your everyday rotation."}</p><div class="product-actions"><span class="tag">${product.category || "Greek Gods"}</span><button class="add-btn" type="button" data-id="${product.id}">Add to bag</button></div></div></article>`).join(""); document.getElementById("no-results").classList.toggle("visible", list.length === 0); }
-function updateCart() { cartCount.textContent = cart.reduce((total, item) => total + item.quantity, 0); subtotalEl.textContent = formatPrice(cart.reduce((total, item) => total + item.price * item.quantity, 0)); cartItems.innerHTML = cart.length ? cart.map((item) => `<div class="cart-item"><img src="${item.image}" alt="${item.name}" /><div class="item-details"><h4>${item.name}</h4><span class="item-price">${formatPrice(item.price)}</span><div class="item-qty"><button class="qty-btn" type="button" data-action="decrease" data-id="${item.id}">−</button><span>${item.quantity}</span><button class="qty-btn" type="button" data-action="increase" data-id="${item.id}">+</button></div></div><button class="remove-btn" type="button" data-action="remove" data-id="${item.id}">Remove</button></div>`).join("") : '<p class="empty-cart">Your bag is waiting.</p>'; }
-function setCartOpen(isOpen) { cartPanel.classList.toggle("open", isOpen); cartBackdrop.classList.toggle("open", isOpen); cartPanel.setAttribute("aria-hidden", String(!isOpen)); document.body.classList.toggle("cart-open", isOpen); }
-function addToCart(productId) { const product = products.find((item) => item.id === productId); if (!product) return; const existing = getCartItem(productId); existing ? existing.quantity += 1 : cart.push({ ...product, quantity: 1 }); updateCart(); setCartOpen(true); showToast(`${product.name} added to your bag`); }
-function changeQuantity(productId, change) { const item = getCartItem(productId); if (!item) return; item.quantity += change; if (item.quantity <= 0) cart.splice(cart.indexOf(item), 1); updateCart(); }
-document.addEventListener("click", (event) => { const addButton = event.target.closest(".add-btn"); if (addButton) return addToCart(Number(addButton.dataset.id)); const qtyButton = event.target.closest(".qty-btn"); if (qtyButton) return qtyButton.dataset.action === "increase" ? changeQuantity(Number(qtyButton.dataset.id), 1) : changeQuantity(Number(qtyButton.dataset.id), -1); const removeButton = event.target.closest(".remove-btn"); if (removeButton) { cart.splice(cart.findIndex((item) => item.id === Number(removeButton.dataset.id)), 1); return updateCart(); } if (event.target.closest(".cart-btn")) setCartOpen(true); if (event.target.closest("#close-cart") || event.target === cartBackdrop) setCartOpen(false); if (event.target.closest(".checkout-btn")) { if (!cart.length) return showToast("Add an item before checkout"); showToast("Opening MTN MoMo transfer..."); window.location.href = "tel:*170%23"; } });
-document.getElementById("search-button").addEventListener("click", () => { document.getElementById("search-bar").classList.toggle("open"); document.getElementById("search-input").focus(); });
-document.getElementById("search-bar").addEventListener("submit", (event) => event.preventDefault());
-document.getElementById("search-input").addEventListener("input", (event) => { const query = event.target.value.toLowerCase().trim(); renderProducts(products.filter((product) => `${product.name} ${product.category} ${product.description}`.toLowerCase().includes(query))); });
-renderProducts(); updateCart();
+document.getElementById("bag-trigger").addEventListener("click", (event) => openDrawer(event.currentTarget));
+document.getElementById("close-drawer").addEventListener("click", closeDrawer);
+drawerBackdrop.addEventListener("click", closeDrawer);
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const addButton = target.closest("[data-add-id], [data-dialog-add-id]");
+  if (addButton) {
+    const id = addButton.dataset.addId || addButton.dataset.dialogAddId;
+    if (productDialog.open) productDialog.close();
+    addToCart(id);
+    return;
+  }
+
+  const productButton = target.closest("[data-product-id]");
+  if (productButton) {
+    openProduct(productButton.dataset.productId);
+    return;
+  }
+
+  const quantityButton = target.closest("[data-quantity-id]");
+  if (quantityButton) {
+    changeQuantity(quantityButton.dataset.quantityId, Number(quantityButton.dataset.change));
+    return;
+  }
+
+  const removeButton = target.closest("[data-remove-id]");
+  if (removeButton) {
+    cart = cart.filter((entry) => entry.id !== removeButton.dataset.removeId);
+    saveCart();
+    renderCart();
+    return;
+  }
+
+  if (target.closest("#start-checkout")) {
+    renderCheckout();
+    document.getElementById("checkout-name").focus();
+    return;
+  }
+
+  if (target.closest("#back-to-bag")) {
+    renderCart();
+    document.getElementById("start-checkout").focus();
+    return;
+  }
+
+  if (target.closest("#finish-confirmation")) closeDrawer();
+});
+
+drawerBody.addEventListener("submit", (event) => {
+  if (!(event.target instanceof HTMLFormElement) || event.target.id !== "checkout-form") return;
+  event.preventDefault();
+  if (!event.target.reportValidity()) return;
+  const formData = new FormData(event.target);
+  const name = String(formData.get("name") || "").trim();
+  if (!name || !cart.length) {
+    document.getElementById("checkout-error").textContent = "Your bag is empty. Add a product before continuing.";
+    return;
+  }
+  const total = cartTotal();
+  const orderItems = cartEntries();
+  cart = [];
+  saveCart();
+  updateBagCount();
+  renderConfirmation(name, total, orderItems);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    const menuWasOpen = menuToggle.getAttribute("aria-expanded") === "true";
+    closeMobileMenu();
+    if (menuWasOpen) menuToggle.focus();
+    if (!drawer.hidden) closeDrawer();
+  }
+  if (event.key !== "Tab" || drawer.hidden) return;
+  const focusable = [...drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])')]
+    .filter((element) => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
+document.getElementById("close-product-dialog").addEventListener("click", () => productDialog.close());
+productDialog.addEventListener("click", (event) => {
+  if (event.target === productDialog) productDialog.close();
+});
+
+document.getElementById("contact-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!event.currentTarget.reportValidity()) return;
+  document.getElementById("contact-status").textContent =
+    "Your details are valid, but this static site cannot deliver messages. Connect a form service before launch.";
+  event.currentTarget.reset();
+});

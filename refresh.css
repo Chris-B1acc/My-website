@@ -1,13 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
-  --ink: #171715;
-  --paper: #f5f3ed;
-  --acid: #d4ed42;
-  --orange: #d34c31;
-  --muted: #77766f;
-  --line: #d7d5ce;
-  --white: #fffefa;
+  --ink: #0b0f1a;
+  --paper: #eef4ff;
+  --acid: #4e7cf5;
+  --orange: #183d8c;
+  --muted: #5d687d;
+  --line: #d7e1f5;
+  --white: #ffffff;
 }
 
 body { font-family: "DM Sans", sans-serif; }
@@ -55,11 +55,11 @@ h2 { font-size: clamp(2.7rem, 5vw, 5rem); line-height: .98; }
 .collection-grid { gap: 0; border: 1px solid var(--ink); }
 .collection-card { min-height: 310px; padding: 27px; border: 0; }
 .collection-card + .collection-card { border-left: 1px solid var(--ink); }
-.accent-1 { background: #e5a187; }
-.accent-2 { background: #d8ded3; }
+.accent-1 { background: #cfe0ff; }
+.accent-2 { background: #dfeaff; }
 .accent-3 { background: var(--acid); }
 .collection-card h3 { font-size: 2.1rem; }
-.story { margin-top: 112px; padding: 112px 0; background: #25372e; }
+.story { margin-top: 112px; padding: 112px 0; background: #101b35; }
 .story .eyebrow { color: var(--acid); }
 .story h2 { font-size: clamp(3.4rem, 7vw, 6.4rem); }
 .story h2 em { color: #e5a187; }
