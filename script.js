@@ -365,6 +365,12 @@ function renderCheckout() {
       <input id="checkout-email" name="email" type="email" autocomplete="email" required maxlength="254">
       <label for="checkout-address">Delivery address</label>
       <input id="checkout-address" name="address" autocomplete="street-address" required maxlength="200">
+      <div class="checkout-payment">
+        <strong>Payment method</strong>
+        <span>MTN Mobile Money</span>
+        <span>Number: +233537599376</span>
+        <small>Payment is arranged manually; this site does not process it.</small>
+      </div>
       <p class="cart-total"><span>Order total</span><strong>${formatPrice(cartTotal())}</strong></p>
       <div class="checkout-buttons">
         <button class="button button-quiet" id="back-to-bag" type="button">Back to bag</button>
